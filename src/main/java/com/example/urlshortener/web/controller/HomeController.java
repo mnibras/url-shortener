@@ -1,6 +1,7 @@
 package com.example.urlshortener.web.controller;
 
 import com.example.urlshortener.ApplicationProperties;
+import com.example.urlshortener.domain.exception.ShortUrlNotFoundException;
 import com.example.urlshortener.domain.model.CreateShortUrlCommand;
 import com.example.urlshortener.domain.model.ShortUrlDto;
 import com.example.urlshortener.domain.service.ShortUrlService;
@@ -11,10 +12,12 @@ import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
+import java.util.Optional;
 
 @Controller
 public class HomeController {
@@ -56,6 +59,16 @@ public class HomeController {
             redirectAttributes.addFlashAttribute("errorMessage", "Failed to create short URL");
         }
         return "redirect:/";
+    }
+
+    @GetMapping("/s/{shortKey}")
+    String redirectToOriginalUrl(@PathVariable String shortKey) {
+        Optional<ShortUrlDto> shortUrlDtoOptional = shortUrlService.accessShortUrl(shortKey);
+        if (shortUrlDtoOptional.isEmpty()) {
+            throw new ShortUrlNotFoundException("Invalid short key: " + shortKey);
+        }
+        ShortUrlDto shortUrlDto = shortUrlDtoOptional.get();
+        return "redirect:" + shortUrlDto.originalUrl();
     }
 
 }

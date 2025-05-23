@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static java.time.temporal.ChronoUnit.DAYS;
 
@@ -21,6 +22,10 @@ public class ShortUrlService {
     private final ShortUrlRepository shortUrlRepository;
     private final EntityMapper entityMapper;
     private final ApplicationProperties properties;
+
+    private static final String CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    private static final int SHORT_KEY_LENGTH = 6;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     public ShortUrlService(ShortUrlRepository shortUrlRepository,
                            EntityMapper entityMapper,
@@ -56,6 +61,21 @@ public class ShortUrlService {
         return entityMapper.toShortUrlDto(shortUrl);
     }
 
+    @Transactional
+    public Optional<ShortUrlDto> accessShortUrl(String shortKey) {
+        Optional<ShortUrl> shortUrlOptional = shortUrlRepository.findByShortKey(shortKey);
+        if (shortUrlOptional.isEmpty()) {
+            return Optional.empty();
+        }
+        ShortUrl shortUrl = shortUrlOptional.get();
+        if (shortUrl.getExpiresAt() != null && shortUrl.getExpiresAt().isBefore(Instant.now())) {
+            return Optional.empty();
+        }
+        shortUrl.setClickCount(shortUrl.getClickCount() + 1);
+        shortUrlRepository.save(shortUrl);
+        return shortUrlOptional.map(entityMapper::toShortUrlDto);
+    }
+
     private String generateUniqueShortKey() {
         String shortKey;
         do {
@@ -64,11 +84,7 @@ public class ShortUrlService {
         return shortKey;
     }
 
-    private static final String CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    private static final int SHORT_KEY_LENGTH = 6;
-    private static final SecureRandom RANDOM = new SecureRandom();
-
-    public static String generateRandomShortKey() {
+    private static String generateRandomShortKey() {
         StringBuilder sb = new StringBuilder(SHORT_KEY_LENGTH);
         for (int i = 0; i < SHORT_KEY_LENGTH; i++) {
             sb.append(CHARACTERS.charAt(RANDOM.nextInt(CHARACTERS.length())));
