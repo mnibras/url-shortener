@@ -1,12 +1,16 @@
 package com.example.urlshortener.web.controller;
 
 import com.example.urlshortener.ApplicationProperties;
+import com.example.urlshortener.domain.entity.User;
 import com.example.urlshortener.domain.exception.ShortUrlNotFoundException;
 import com.example.urlshortener.domain.model.CreateShortUrlCommand;
 import com.example.urlshortener.domain.model.ShortUrlDto;
+import com.example.urlshortener.domain.security.SecurityUtils;
 import com.example.urlshortener.domain.service.ShortUrlService;
 import com.example.urlshortener.web.controller.dto.CreateShortUrlForm;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -22,16 +26,21 @@ import java.util.Optional;
 @Controller
 public class HomeController {
 
+    private static final Logger log = LoggerFactory.getLogger(HomeController.class);
     private final ShortUrlService shortUrlService;
     private final ApplicationProperties properties;
+    private final SecurityUtils securityUtils;
 
-    public HomeController(ShortUrlService shortUrlService, ApplicationProperties properties) {
+    public HomeController(ShortUrlService shortUrlService, ApplicationProperties properties, SecurityUtils securityUtils) {
         this.shortUrlService = shortUrlService;
         this.properties = properties;
+        this.securityUtils = securityUtils;
     }
 
     @GetMapping("/")
     public String home(Model model) {
+        User currentUser = securityUtils.getCurrentUser();
+        log.info("Current Logged In User: {}", currentUser != null ? currentUser.getEmail() : "Guest");
         List<ShortUrlDto> shortUrls = shortUrlService.findAllPublicShortUrls();
         model.addAttribute("shortUrls", shortUrls);
         model.addAttribute("baseUrl", properties.baseUrl());
@@ -69,6 +78,11 @@ public class HomeController {
         }
         ShortUrlDto shortUrlDto = shortUrlDtoOptional.get();
         return "redirect:" + shortUrlDto.originalUrl();
+    }
+
+    @GetMapping("/login")
+    String loginForm() {
+        return "login";
     }
 
 }
