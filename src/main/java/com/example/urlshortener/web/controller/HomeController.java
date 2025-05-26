@@ -1,32 +1,25 @@
 package com.example.urlshortener.web.controller;
 
 import com.example.urlshortener.ApplicationProperties;
-import com.example.urlshortener.domain.entity.User;
 import com.example.urlshortener.domain.exception.ShortUrlNotFoundException;
 import com.example.urlshortener.domain.model.CreateShortUrlCommand;
+import com.example.urlshortener.domain.model.PagedResult;
 import com.example.urlshortener.domain.model.ShortUrlDto;
 import com.example.urlshortener.domain.security.SecurityUtils;
 import com.example.urlshortener.domain.service.ShortUrlService;
 import com.example.urlshortener.web.controller.dto.CreateShortUrlForm;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.util.List;
 import java.util.Optional;
 
 @Controller
 public class HomeController {
 
-    private static final Logger log = LoggerFactory.getLogger(HomeController.class);
     private final ShortUrlService shortUrlService;
     private final ApplicationProperties properties;
     private final SecurityUtils securityUtils;
@@ -38,13 +31,11 @@ public class HomeController {
     }
 
     @GetMapping("/")
-    public String home(Model model) {
-        User currentUser = securityUtils.getCurrentUser();
-        log.info("Current Logged In User: {}", currentUser != null ? currentUser.getEmail() : "Guest");
-        List<ShortUrlDto> shortUrls = shortUrlService.findAllPublicShortUrls();
-        model.addAttribute("shortUrls", shortUrls);
-        model.addAttribute("baseUrl", properties.baseUrl());
-        model.addAttribute("createShortUrlForm", new CreateShortUrlForm(""));
+    public String home(@RequestParam(defaultValue = "1") Integer page,
+                       Model model) {
+        this.addShortUrlsDataToModel(model, page);
+        model.addAttribute("createShortUrlForm",
+                new CreateShortUrlForm("", false, null));
         return "index";
     }
 
@@ -54,13 +45,12 @@ public class HomeController {
                           RedirectAttributes redirectAttributes,
                           Model model) {
         if (bindingResult.hasErrors()) {
-            List<ShortUrlDto> shortUrls = shortUrlService.findAllPublicShortUrls();
-            model.addAttribute("shortUrls", shortUrls);
-            model.addAttribute("baseUrl", properties.baseUrl());
+            this.addShortUrlsDataToModel(model, 1);
             return "index";
         }
         try {
-            CreateShortUrlCommand cmd = new CreateShortUrlCommand(form.originalUrl());
+            Long userId = securityUtils.getCurrentUserId();
+            CreateShortUrlCommand cmd = new CreateShortUrlCommand(form.originalUrl(), form.isPrivate(), form.expirationInDays(), userId);
             var shortUrlDto = shortUrlService.createShortUrl(cmd);
             redirectAttributes.addFlashAttribute("successMessage", "Short URL created successfully " +
                     properties.baseUrl() + "/s/" + shortUrlDto.shortKey());
@@ -72,7 +62,8 @@ public class HomeController {
 
     @GetMapping("/s/{shortKey}")
     String redirectToOriginalUrl(@PathVariable String shortKey) {
-        Optional<ShortUrlDto> shortUrlDtoOptional = shortUrlService.accessShortUrl(shortKey);
+        Long userId = securityUtils.getCurrentUserId();
+        Optional<ShortUrlDto> shortUrlDtoOptional = shortUrlService.accessShortUrl(shortKey, userId);
         if (shortUrlDtoOptional.isEmpty()) {
             throw new ShortUrlNotFoundException("Invalid short key: " + shortKey);
         }
@@ -83,6 +74,12 @@ public class HomeController {
     @GetMapping("/login")
     String loginForm() {
         return "login";
+    }
+
+    private void addShortUrlsDataToModel(Model model, int pageNo) {
+        PagedResult<ShortUrlDto> shortUrls = shortUrlService.findAllPublicShortUrls(pageNo, properties.pageSize());
+        model.addAttribute("shortUrls", shortUrls);
+        model.addAttribute("baseUrl", properties.baseUrl());
     }
 
 }
